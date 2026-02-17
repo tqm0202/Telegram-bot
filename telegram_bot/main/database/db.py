@@ -1,7 +1,6 @@
-import sqlite3
-from pathlib import Path
+import psycopg2
 
-DB_PATH = Path(__file__).resolve().parents[3] / "users.db"
+from telegram_bot.main.config import DATABASE_URL
 
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    return psycopg2.connect(DATABASE_URL)

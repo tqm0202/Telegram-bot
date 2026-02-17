@@ -2,8 +2,8 @@ import logging
 
 from aiogram import F, Router, types
 from aiogram.filters import CommandStart
-from telegram_bot.main.database.models import add_user
-from telegram_bot.main.config import ADMIN_ID
+from telegram_bot.main.database.models import add_user, get_primary_admin_id, is_admin
+from telegram_bot.main.keyboards.inline import open_admin_panel_keyboard
 from aiogram.types import Message
 
 router = Router()
@@ -18,6 +18,13 @@ async def start_handler(message: Message):
         message.from_user.username,
     )
     add_user(message.from_user.id, message.from_user.username)
+    if is_admin(message.from_user.id):
+        await message.answer(
+            "Siz admin sifatida kirdingiz.\n"
+            "Adminni boshqarish uchun tugmani bosing yoki /admin yozing.",
+            reply_markup=open_admin_panel_keyboard(),
+        )
+        return
     await message.answer(
         "Assalomu alaykum.\n\n"
         "Bu bot orqali admin bilan bog'lanishingiz mumkin.\n"
@@ -32,10 +39,12 @@ async def start_handler(message: Message):
 @router.message()
 async def user_message(message: Message):
     user = message.from_user
-    if not user or user.id == ADMIN_ID:
+    admin_id = get_primary_admin_id()
+    if not user or is_admin(user.id):
         return
     if message.text and message.text.startswith("/start"):
         return
+    add_user(user.id, user.username)
 
     content_type = message.content_type
     username = f"@{user.username}" if user.username else "yo'q"
@@ -47,9 +56,9 @@ async def user_message(message: Message):
         f"📦 Turi: {content_type}"
     )
 
-    forwarded_message = await message.copy_to(ADMIN_ID)
+    forwarded_message = await message.copy_to(admin_id)
     await message.bot.send_message(
-        ADMIN_ID,
+        admin_id,
         text,
         reply_to_message_id=forwarded_message.message_id,
     )
