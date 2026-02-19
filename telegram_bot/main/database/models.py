@@ -1,4 +1,5 @@
 import logging
+import json
 
 from .db import get_connection
 from telegram_bot.main.config import ADMIN_ID
@@ -20,6 +21,25 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS admins (
             user_id BIGINT PRIMARY KEY,
             is_primary BOOLEAN NOT NULL DEFAULT FALSE
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS incoming_messages (
+            id BIGSERIAL PRIMARY KEY,
+            telegram_message_id BIGINT NOT NULL,
+            chat_id BIGINT NOT NULL,
+            user_id BIGINT NOT NULL,
+            username TEXT,
+            content_type TEXT NOT NULL,
+            text TEXT,
+            caption TEXT,
+            file_id TEXT,
+            file_unique_id TEXT,
+            file_name TEXT,
+            miype TEXT,
+            file_size BIGINT,
+            payload JSONB,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
         """)
         cursor.execute("SELECT COUNT(*) FROM admins")
@@ -156,5 +176,73 @@ def list_admins():
         ORDER BY is_primary DESC, user_id ASC
         """)
         return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+def save_incoming_message(
+    *,
+    telegram_message_id,
+    chat_id,
+    user_id,
+    username,
+    content_type,
+    text=None,
+    caption=None,
+    file_id=None,
+    file_unique_id=None,
+    file_name=None,
+    mime_type=None,
+    file_size=None,
+    payload=None,
+):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO incoming_messages (
+                telegram_message_id,
+                chat_id,
+                user_id,
+                username,
+                content_type,
+                text,
+                caption,
+                file_id,
+                file_unique_id,
+                file_name,
+                mime_type,
+                file_size,
+                payload
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            """,
+            (
+                telegram_message_id,
+                chat_id,
+                user_id,
+                username,
+                content_type,
+                text,
+                caption,
+                file_id,
+                file_unique_id,
+                file_name,
+                mime_type,
+                file_size,
+                json.dumps(payload) if payload is not None else None,
+            ),
+        )
+        conn.commit()
+    except Exception:
+        logger.exception(
+            "Failed to save incoming message: user_id=%s message_id=%s content_type=%s",
+            user_id,
+            telegram_message_id,
+            content_type,
+        )
+        conn.rollback()
+        raise
     finally:
         conn.close()
